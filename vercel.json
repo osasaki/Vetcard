@@ -1,0 +1,6 @@
+{
+  "rewrites": [
+    { "source": "/cliente/:id", "destination": "/cliente-firebase.html" },
+    { "source": "/staff",       "destination": "/staff-firebase.html" }
+  ]
+}

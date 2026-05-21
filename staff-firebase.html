@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Staff Panel — Patitas VIP</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Instrument+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+
+<!-- ══════════════════════════════════════════
+     🔥 PASO 1: PEGÁ TU CONFIGURACIÓN DE FIREBASE ACÁ
+     ══════════════════════════════════════════ -->
+<script type="module">
+  import { initializeApp }    from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
+  import { getFirestore, doc, getDoc, updateDoc, addDoc, collection, serverTimestamp, query, orderBy, limit, onSnapshot, increment }
+    from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey:            "AIzaSyAs227zebpKSNPehrSHMRjZGAcDgu0sRYc",
+    authDomain:        "vetcard-a1104.firebaseapp.com",
+    projectId:         "vetcard-a1104",
+    storageBucket:     "vetcard-a1104.firebasestorage.app",
+    messagingSenderId: "73932243186",
+    appId:             "1:73932243186:web:c060e8f29b852ac042d06b"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db  = getFirestore(app);
+
+  // ── Exponer funciones al scope global ──
+  window._db = db;
+  window._doc = doc;
+  window._getDoc = getDoc;
+  window._updateDoc = updateDoc;
+  window._addDoc = addDoc;
+  window._collection = collection;
+  window._serverTimestamp = serverTimestamp;
+  window._increment = increment;
+  window._query = query;
+  window._orderBy = orderBy;
+  window._limit = limit;
+  window._onSnapshot = onSnapshot;
+
+  // Helper para estado de conexión en la interfaz
+  function setConnectionStatus(status) {
+    const dot = document.querySelector(".status-dot");
+    const text = document.querySelector(".status-text");
+    if (!dot || !text) return;
+    if (status === "connecting") {
+      dot.style.background = "#F39C12";
+      dot.style.boxShadow = "0 0 0 2px rgba(243,156,18,0.25)";
+      text.textContent = "Conectando a Firebase...";
+      text.style.color = "rgba(255,255,255,0.45)";
+    } else if (status === "connected") {
+      dot.style.background = "#4CAF7A";
+      dot.style.boxShadow = "0 0 0 2px rgba(76,175,122,0.25)";
+      text.textContent = "Firebase conectado";
+      text.style.color = "rgba(255,255,255,0.45)";
+    } else if (status === "error") {
+      dot.style.background = "#E74C3C";
+      dot.style.boxShadow = "0 0 0 2px rgba(231,76,60,0.25)";
+      text.textContent = "Error de conexión";
+      text.style.color = "#E74C3C";
+    }
+  }
+
+  // Establecer conectando al inicio
+  setConnectionStatus("connecting");
+
+  // ── Escuchar actividad reciente en tiempo real ──
+  const actRef = query(
+    collection(db, "actividad"),
+    orderBy("timestamp", "desc"),
+    limit(20)
+  );
+  onSnapshot(actRef, (snap) => {
+    setConnectionStatus("connected");
+    const items = snap.docs.map(d => d.data());
+    renderFeed(items);
+  }, (error) => {
+    console.error("Error en Firebase Feed:", error);
+    setConnectionStatus("error");
+    const feedList = document.getElementById("feedList");
+    if (feedList) {
+      feedList.innerHTML = `
+        <div class="feed-empty" style="color: #C0392B;">
+          ⚠️ Error al conectar con Firestore. Verifique las credenciales de Firebase en el código e intente de nuevo.<br>
+          <small>${error.message}</small>
+        </div>
+      `;
+    }
+  });
+</script>
+</head>
+<body>
+
+<!-- ══ ESTILOS ══ -->
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --ink: #0F1714; --ink2: #1E2B26;
+  --sage: #3D7A5F; --sage-light: #5A9E7C; --sage-dim: rgba(61,122,95,0.12);
+  --gold: #C8913A; --gold-dim: rgba(200,145,58,0.15);
+  --surface: #F6F2EC; --card: #FDFAF6; --border: rgba(15,23,20,0.08);
+  --muted: #7A8882; --red: #C0392B; --red-dim: rgba(192,57,43,0.1);
+}
+html, body { height: 100%; background: var(--surface); font-family: "Instrument Sans", sans-serif; color: var(--ink); -webkit-font-smoothing: antialiased; }
+.app { min-height: 100vh; display: grid; grid-template-rows: auto 1fr; }
+
+/* TOPBAR */
+.topbar { background:var(--ink); padding:0 24px; height:56px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:100; }
+.topbar-brand { display:flex; align-items:center; gap:10px; }
+.topbar-paw { width:30px; height:30px; background:var(--sage); border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:15px; }
+.topbar-name { font-family:"Syne",sans-serif; font-size:15px; font-weight:700; color:#fff; }
+.topbar-name span { color:var(--sage-light); }
+.status-dot { width:7px; height:7px; border-radius:50%; background:#4CAF7A; animation:blink 2s ease-in-out infinite; }
+.status-text { font-size:12px; color:rgba(255,255,255,0.45); }
+@keyframes blink { 0%,100%{opacity:1;} 50%{opacity:0.4;} }
+
+/* LAYOUT */
+.main { display:grid; grid-template-columns:380px 1fr; gap:0; height:calc(100vh - 56px); overflow:hidden; }
+
+/* LEFT */
+.left-panel { background:var(--card); border-right:1px solid var(--border); display:flex; flex-direction:column; overflow:hidden; }
+.scanner-section { padding:24px; border-bottom:1px solid var(--border); }
+.section-label { font-family:"Syne",sans-serif; font-size:11px; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:var(--muted); margin-bottom:14px; display:flex; align-items:center; gap:8px; }
+.section-label::after { content:''; flex:1; height:1px; background:var(--border); }
+.scanner-box { background:var(--ink2); border-radius:16px; overflow:hidden; aspect-ratio:1; position:relative; display:flex; align-items:center; justify-content:center; }
+#reader { width:100% !important; border:none !important; }
+.scanner-idle { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; z-index:2; background:var(--ink2); transition:opacity 0.3s; }
+.scanner-idle.hidden { opacity:0; pointer-events:none; }
+.scanner-icon { width:64px; height:64px; border:2px solid rgba(255,255,255,0.15); border-radius:16px; display:flex; align-items:center; justify-content:center; font-size:28px; position:relative; }
+.scanner-icon::before { content:''; position:absolute; top:-3px; left:-3px; width:14px; height:14px; border-top:3px solid var(--sage-light); border-left:3px solid var(--sage-light); border-radius:3px 0 0 0; }
+.scanner-icon::after  { content:''; position:absolute; bottom:-3px; right:-3px; width:14px; height:14px; border-bottom:3px solid var(--sage-light); border-right:3px solid var(--sage-light); border-radius:0 0 3px 0; }
+.scanner-idle p { font-size:13px; color:rgba(255,255,255,0.4); text-align:center; }
+.scanner-line { position:absolute; left:12%; right:12%; height:2px; background:linear-gradient(90deg,transparent,var(--sage-light),transparent); border-radius:99px; animation:scanMove 2.5s ease-in-out infinite; opacity:0.7; }
+@keyframes scanMove { 0%{top:20%;} 50%{top:75%;} 100%{top:20%;} }
+.scanner-controls { margin-top:12px; }
+.btn-scan { width:100%; padding:12px; background:var(--sage); color:#fff; border:none; border-radius:12px; font-family:"Syne",sans-serif; font-size:13px; font-weight:700; cursor:pointer; transition:all 0.2s; }
+.btn-scan:hover { background:var(--sage-light); }
+.btn-scan.active { background:var(--red); }
+
+.manual-section { padding:20px 24px; border-bottom:1px solid var(--border); }
+.input-wrap { display:flex; gap:8px; }
+.client-input { flex:1; padding:11px 14px; background:var(--surface); border:1px solid var(--border); border-radius:10px; font-family:"Instrument Sans",sans-serif; font-size:14px; color:var(--ink); outline:none; transition:border-color 0.2s; }
+.client-input:focus { border-color:var(--sage); box-shadow:0 0 0 3px var(--sage-dim); }
+.btn-search { padding:11px 16px; background:var(--ink); color:#fff; border:none; border-radius:10px; font-size:13px; cursor:pointer; transition:all 0.2s; }
+.btn-search:hover { background:var(--ink2); }
+
+.client-section { padding:20px 24px; flex:1; overflow-y:auto; }
+.client-card { background:var(--surface); border:1px solid var(--border); border-radius:16px; overflow:hidden; opacity:0; transform:translateY(8px); transition:all 0.4s cubic-bezier(0.16,1,0.3,1); }
+.client-card.visible { opacity:1; transform:translateY(0); }
+.client-card-header { padding:16px 18px; background:var(--ink); display:flex; align-items:center; gap:12px; }
+.client-avatar { width:42px; height:42px; background:var(--sage); border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:20px; }
+.client-pet { font-family:"Syne",sans-serif; font-size:16px; font-weight:700; color:#fff; }
+.client-owner { font-size:12px; color:rgba(255,255,255,0.45); margin-top:1px; }
+.client-badge { padding:4px 10px; border-radius:99px; font-size:11px; font-weight:500; }
+.badge-active { background:rgba(76,175,122,0.2); color:#4CAF7A; }
+.badge-prize  { background:var(--gold-dim); color:var(--gold); }
+
+.stamps-mini { padding:16px 18px; display:flex; gap:8px; border-bottom:1px solid var(--border); }
+.stamp-dot { width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:16px; transition:all 0.3s cubic-bezier(0.34,1.56,0.64,1); }
+.stamp-dot.on { background:linear-gradient(135deg,var(--sage-light),var(--sage)); box-shadow:0 2px 8px rgba(61,122,95,0.3); }
+.stamp-dot.off { background:var(--border); border:1.5px dashed rgba(0,0,0,0.1); color:rgba(0,0,0,0.15); font-size:11px; }
+.stamp-dot.prize-dot { background:linear-gradient(135deg,#E8B85A,var(--gold)); box-shadow:0 2px 12px rgba(200,145,58,0.4); animation:goldPulse 1.5s ease-in-out infinite; }
+@keyframes goldPulse { 0%,100%{box-shadow:0 2px 12px rgba(200,145,58,0.4);} 50%{box-shadow:0 2px 20px rgba(200,145,58,0.7);} }
+
+.client-stats { display:grid; grid-template-columns:repeat(3,1fr); border-bottom:1px solid var(--border); }
+.stat-cell { padding:12px 14px; border-right:1px solid var(--border); }
+.stat-cell:last-child { border-right:none; }
+.stat-num { font-family:"Syne",sans-serif; font-size:20px; font-weight:800; color:var(--ink); line-height:1; }
+.stat-lbl { font-size:10px; color:var(--muted); margin-top:3px; }
+
+.client-actions { padding:14px 18px; display:flex; gap:8px; }
+.btn-add-stamp { flex:1; padding:13px; background:var(--sage); color:#fff; border:none; border-radius:12px; font-family:"Syne",sans-serif; font-size:13px; font-weight:700; cursor:pointer; transition:all 0.2s; }
+.btn-add-stamp:hover { background:var(--sage-light); transform:translateY(-1px); }
+.btn-add-stamp:disabled { background:var(--border); color:var(--muted); cursor:default; transform:none; }
+.btn-redeem { padding:13px 16px; background:var(--gold-dim); color:var(--gold); border:1px solid rgba(200,145,58,0.2); border-radius:12px; font-family:"Syne",sans-serif; font-size:13px; font-weight:700; cursor:pointer; transition:all 0.2s; }
+.btn-redeem:hover { background:rgba(200,145,58,0.25); }
+.btn-redeem:disabled { opacity:0.3; cursor:default; }
+
+.empty-state { text-align:center; padding:32px 20px; color:var(--muted); font-size:13px; line-height:1.6; }
+
+/* RIGHT */
+.right-panel { display:flex; flex-direction:column; overflow:hidden; background:var(--surface); }
+.right-header { padding:24px 28px 0; display:flex; align-items:center; justify-content:space-between; flex-shrink:0; }
+.right-title { font-family:"Syne",sans-serif; font-size:22px; font-weight:800; color:var(--ink); letter-spacing:-0.3px; }
+.today-badge { font-size:12px; color:var(--muted); background:var(--card); border:1px solid var(--border); padding:5px 12px; border-radius:99px; }
+
+.stats-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; padding:20px 28px; flex-shrink:0; }
+.stat-card { background:var(--card); border:1px solid var(--border); border-radius:14px; padding:16px 18px; position:relative; overflow:hidden; }
+.stat-card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; border-radius:14px 14px 0 0; }
+.stat-card.green::before { background:var(--sage); }
+.stat-card.gold::before  { background:var(--gold); }
+.stat-card.blue::before  { background:#5B8DD9; }
+.sc-num { font-family:"Syne",sans-serif; font-size:32px; font-weight:800; color:var(--ink); letter-spacing:-1px; line-height:1; }
+.sc-lbl { font-size:12px; color:var(--muted); margin-top:4px; }
+
+.activity-feed { flex:1; overflow-y:auto; padding:0 28px 24px; }
+.feed-label { font-family:"Syne",sans-serif; font-size:11px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:var(--muted); margin-bottom:12px; display:flex; align-items:center; gap:8px; }
+.feed-label::after { content:''; flex:1; height:1px; background:var(--border); }
+.feed-item { display:flex; align-items:center; gap:14px; padding:14px 0; border-bottom:1px solid var(--border); animation:feedIn 0.4s cubic-bezier(0.16,1,0.3,1) both; }
+@keyframes feedIn { from{opacity:0;transform:translateX(-12px);} to{opacity:1;transform:translateX(0);} }
+.feed-item:last-child { border-bottom:none; }
+.feed-icon { width:38px; height:38px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:16px; flex-shrink:0; }
+.feed-icon.stamp-ev  { background:var(--sage-dim); }
+.feed-icon.prize-ev  { background:var(--gold-dim); }
+.feed-icon.redeem-ev { background:var(--red-dim); }
+.feed-title { font-size:14px; font-weight:500; color:var(--ink); line-height:1.3; }
+.feed-sub   { font-size:12px; color:var(--muted); margin-top:2px; }
+.feed-time  { font-size:11px; color:var(--muted); white-space:nowrap; }
+.feed-empty { text-align:center; padding:48px 24px; color:var(--muted); font-size:13px; }
+
+/* OVERLAY */
+.overlay { position:fixed; inset:0; background:rgba(15,23,20,0.5); backdrop-filter:blur(4px); z-index:200; display:flex; align-items:center; justify-content:center; opacity:0; pointer-events:none; transition:opacity 0.3s; }
+.overlay.show { opacity:1; pointer-events:all; }
+.confirm-box { background:var(--card); border-radius:20px; padding:28px; width:320px; transform:scale(0.95) translateY(10px); transition:transform 0.35s cubic-bezier(0.16,1,0.3,1); box-shadow:0 24px 64px rgba(0,0,0,0.2); }
+.overlay.show .confirm-box { transform:scale(1) translateY(0); }
+.confirm-icon { font-size:36px; margin-bottom:12px; }
+.confirm-title { font-family:"Syne",sans-serif; font-size:20px; font-weight:800; color:var(--ink); margin-bottom:6px; }
+.confirm-sub { font-size:14px; color:var(--muted); margin-bottom:20px; line-height:1.5; }
+.confirm-btns { display:flex; gap:8px; }
+.btn-confirm { flex:1; padding:13px; background:var(--gold); color:var(--ink); border:none; border-radius:12px; font-family:"Syne",sans-serif; font-size:14px; font-weight:700; cursor:pointer; transition:opacity 0.2s; }
+.btn-confirm:hover { opacity:0.85; }
+.btn-cancel { flex:1; padding:13px; background:var(--surface); color:var(--muted); border:1px solid var(--border); border-radius:12px; font-size:14px; cursor:pointer; }
+
+/* TOAST */
+.toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(80px); background:var(--ink); color:#fff; padding:14px 22px; border-radius:14px; font-size:14px; font-weight:500; display:flex; align-items:center; gap:10px; z-index:999; transition:transform 0.4s cubic-bezier(0.16,1,0.3,1); box-shadow:0 8px 32px rgba(0,0,0,0.25); white-space:nowrap; }
+.toast.show { transform:translateX(-50%) translateY(0); }
+.toast.prize { background:var(--gold); color:var(--ink); }
+
+::-webkit-scrollbar { width:4px; }
+::-webkit-scrollbar-thumb { background:var(--border); border-radius:99px; }
+</style>
+
+<div class="app">
+  <div class="topbar">
+    <div class="topbar-brand">
+      <div class="topbar-paw">🐾</div>
+      <div class="topbar-name">Patitas <span>VIP</span> · Staff</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <div class="status-dot"></div>
+      <span class="status-text">Firebase conectado</span>
+    </div>
+  </div>
+
+  <div class="main">
+    <!-- LEFT -->
+    <div class="left-panel">
+      <div class="scanner-section">
+        <div class="section-label">Escáner QR</div>
+        <div class="scanner-box">
+          <div class="scanner-idle" id="scannerIdle">
+            <div class="scanner-icon">📷</div>
+            <div class="scanner-line"></div>
+            <p>Apuntá la cámara<br>al QR del cliente</p>
+          </div>
+          <div id="reader"></div>
+        </div>
+        <div class="scanner-controls">
+          <button class="btn-scan" id="btnScan" onclick="toggleScanner()">Iniciar cámara</button>
+        </div>
+      </div>
+
+      <div class="manual-section">
+        <div class="section-label">Búsqueda por ID</div>
+        <div class="input-wrap">
+          <input class="client-input" id="clientInput" type="text" placeholder="ID del cliente (ej: C001)..." onkeydown="if(event.key==='Enter') searchClient()">
+          <button class="btn-search" onclick="searchClient()">Buscar</button>
+        </div>
+      </div>
+
+      <div class="client-section">
+        <div class="section-label">Cliente cargado</div>
+        <div class="client-card" id="clientCard">
+          <div class="client-card-header">
+            <div class="client-avatar" id="clientAvatar">🐾</div>
+            <div style="flex:1">
+              <div class="client-pet" id="clientPet">—</div>
+              <div class="client-owner" id="clientOwner">—</div>
+            </div>
+            <span class="client-badge badge-active" id="clientBadge">Activo</span>
+          </div>
+          <div class="stamps-mini" id="stampsMini"></div>
+          <div class="client-stats">
+            <div class="stat-cell"><div class="stat-num" id="scVisits">0</div><div class="stat-lbl">Hoy</div></div>
+            <div class="stat-cell"><div class="stat-num" id="scTotal">0</div><div class="stat-lbl">Total</div></div>
+            <div class="stat-cell"><div class="stat-num" id="scPrizes">0</div><div class="stat-lbl">Premios</div></div>
+          </div>
+          <div class="client-actions">
+            <button class="btn-add-stamp" id="btnAddStamp" onclick="addStamp()">＋ Sumar sello</button>
+            <button class="btn-redeem" id="btnRedeem" onclick="openRedeem()" disabled>🎁 Canjear</button>
+          </div>
+        </div>
+        <div class="empty-state" id="emptyState">
+          🔍<br>Escaneá un QR o buscá<br>al cliente por ID
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT -->
+    <div class="right-panel">
+      <div class="right-header">
+        <div class="right-title">Actividad del día</div>
+        <div class="today-badge" id="todayBadge">—</div>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-card green"><div class="sc-num" id="statSellos">0</div><div class="sc-lbl">Sellos hoy</div></div>
+        <div class="stat-card gold"><div class="sc-num" id="statPremios">0</div><div class="sc-lbl">Premios canjeados</div></div>
+        <div class="stat-card blue"><div class="sc-num" id="statClientes">0</div><div class="sc-lbl">Clientes atendidos</div></div>
+      </div>
+      <div class="activity-feed">
+        <div class="feed-label">Registro en tiempo real</div>
+        <div id="feedList"><div class="feed-empty">Los registros aparecerán aquí...</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- OVERLAY -->
+<div class="overlay" id="redeemOverlay">
+  <div class="confirm-box">
+    <div class="confirm-icon">🎁</div>
+    <div class="confirm-title">Canjear premio</div>
+    <div class="confirm-sub" id="confirmSub">¿Confirmás el canje?</div>
+    <div class="confirm-btns">
+      <button class="btn-confirm" onclick="confirmRedeem()">Confirmar</button>
+      <button class="btn-cancel"  onclick="closeRedeem()">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast">✓ Listo</div>
+
+<script>
+// ─── Estado local ───
+let currentClient = null;
+let currentId     = null;
+let scannerActive = false;
+let scanner       = null;
+let dayStats      = { sellos: 0, premios: 0, clientes: new Set() };
+
+// ─── Fecha de hoy ───
+const now = new Date();
+document.getElementById("todayBadge").textContent =
+  now.toLocaleDateString("es-PE", { weekday:"long", day:"numeric", month:"long" });
+
+// ─── Buscar cliente ───
+async function searchClient() {
+  const id = document.getElementById("clientInput").value.trim().toUpperCase();
+  if (!id) return;
+  try {
+    const ref  = window._doc(window._db, "clientes", id);
+    const snap = await window._getDoc(ref);
+    if (snap.exists()) {
+      loadClient(id, snap.data());
+    } else {
+      showToast("⚠️ Cliente no encontrado: " + id, false);
+    }
+  } catch (e) {
+    showToast("Error al buscar cliente", false);
+    console.error(e);
+  }
+}
+
+function loadClient(id, data) {
+  currentId     = id;
+  currentClient = data;
+
+  document.getElementById("emptyState").style.display = "none";
+  document.getElementById("clientCard").classList.add("visible");
+
+  const emojis = { perro:"🐶", gato:"🐱", conejo:"🐰", ave:"🐦" };
+  document.getElementById("clientAvatar").textContent  = emojis[data.tipo] || "🐾";
+  document.getElementById("clientPet").textContent     = data.mascota || id;
+  document.getElementById("clientOwner").textContent   = data.dueno  || "—";
+
+  const stamps = data.sellos || 0;
+  const badge  = document.getElementById("clientBadge");
+  if (stamps >= 5) { badge.textContent = "🎁 Premio listo"; badge.className = "client-badge badge-prize"; }
+  else             { badge.textContent = "Activo";           badge.className = "client-badge badge-active"; }
+
+  renderStampsMini(stamps);
+  document.getElementById("scVisits").textContent = data.visitas_hoy   || 0;
+  document.getElementById("scTotal").textContent  = data.visitas_total || 0;
+  document.getElementById("scPrizes").textContent = data.premios       || 0;
+
+  document.getElementById("btnAddStamp").disabled = stamps >= 5;
+  document.getElementById("btnRedeem").disabled   = stamps < 5;
+}
+
+function renderStampsMini(count) {
+  const row = document.getElementById("stampsMini");
+  row.innerHTML = "";
+  for (let i = 0; i < 5; i++) {
+    const d = document.createElement("div");
+    if (i < count) {
+      d.className   = count >= 5 ? "stamp-dot prize-dot" : "stamp-dot on";
+      d.textContent = count >= 5 ? "🎁" : "🐾";
+    } else {
+      d.className   = "stamp-dot off";
+      d.textContent = (i + 1);
+    }
+    row.appendChild(d);
+  }
+}
+
+// ─── Sumar sello ───
+async function addStamp() {
+  if (!currentId) return;
+  const stamps = (currentClient.sellos || 0) + 1;
+  const isPrize = stamps >= 5;
+
+  try {
+    await window._updateDoc(window._doc(window._db, "clientes", currentId), {
+      sellos:        stamps,
+      visitas_total: window._increment(1),
+      visitas_hoy:   window._increment(1),
+    });
+
+    await window._addDoc(window._collection(window._db, "actividad"), {
+      tipo:      isPrize ? "premio" : "sello",
+      mascota:   currentClient.mascota,
+      dueno:     currentClient.dueno,
+      clienteId: currentId,
+      sellos:    stamps,
+      timestamp: window._serverTimestamp(),
+    });
+
+    currentClient.sellos = stamps;
+    currentClient.visitas_total = (currentClient.visitas_total || 0) + 1;
+    currentClient.visitas_hoy   = (currentClient.visitas_hoy   || 0) + 1;
+    loadClient(currentId, currentClient);
+
+    dayStats.sellos++;
+    dayStats.clientes.add(currentId);
+    if (isPrize) dayStats.premios++;
+    updateDayStats();
+
+    showToast(isPrize
+      ? `🎁 ¡Premio listo para ${currentClient.mascota}!`
+      : `🐾 Sello ${stamps}/5 — ${currentClient.mascota}`,
+      isPrize
+    );
+  } catch (e) {
+    showToast("Error al guardar sello", false);
+    console.error(e);
+  }
+}
+
+// ─── Canjear premio ───
+function openRedeem() {
+  if (!currentClient || (currentClient.sellos || 0) < 5) return;
+  document.getElementById("confirmSub").textContent =
+    `¿Confirmás el canje del baño gratis para ${currentClient.mascota} (${currentClient.dueno})?`;
+  document.getElementById("redeemOverlay").classList.add("show");
+}
+
+function closeRedeem() {
+  document.getElementById("redeemOverlay").classList.remove("show");
+}
+
+async function confirmRedeem() {
+  closeRedeem();
+  try {
+    await window._updateDoc(window._doc(window._db, "clientes", currentId), {
+      sellos:  0,
+      premios: window._increment(1),
+    });
+
+    await window._addDoc(window._collection(window._db, "actividad"), {
+      tipo:      "canje",
+      mascota:   currentClient.mascota,
+      dueno:     currentClient.dueno,
+      clienteId: currentId,
+      premio:    "Baño gratis",
+      timestamp: window._serverTimestamp(),
+    });
+
+    currentClient.sellos  = 0;
+    currentClient.premios = (currentClient.premios || 0) + 1;
+    loadClient(currentId, currentClient);
+    dayStats.premios++;
+    updateDayStats();
+    showToast("✅ Premio canjeado con éxito", false);
+  } catch (e) {
+    showToast("Error al canjear premio", false);
+    console.error(e);
+  }
+}
+
+// ─── Feed en tiempo real ───
+function renderFeed(items) {
+  const el = document.getElementById("feedList");
+  if (!items || items.length === 0) {
+    el.innerHTML = '<div class="feed-empty">Aún sin actividad hoy.</div>';
+    return;
+  }
+  const icons = { sello:"🐾", premio:"🎁", canje:"✅" };
+  const cls   = { sello:"stamp-ev", premio:"prize-ev", canje:"redeem-ev" };
+  el.innerHTML = items.map(f => {
+    const t   = f.timestamp?.toDate ? f.timestamp.toDate() : new Date();
+    const hrs = t.getHours() + ":" + String(t.getMinutes()).padStart(2,"0");
+    const ic  = icons[f.tipo] || "🐾";
+    const cl  = cls[f.tipo]  || "stamp-ev";
+    const title = f.tipo === "sello"
+      ? `Sello ${f.sellos}/5 — ${f.mascota}`
+      : f.tipo === "premio"
+      ? `¡Premio desbloqueado! — ${f.mascota}`
+      : `Premio canjeado — ${f.mascota} (${f.premio})`;
+    return `<div class="feed-item">
+      <div class="feed-icon ${cl}">${ic}</div>
+      <div style="flex:1"><div class="feed-title">${title}</div><div class="feed-sub">${f.dueno || ""} · ${f.clienteId || ""}</div></div>
+      <div class="feed-time">${hrs}</div>
+    </div>`;
+  }).join("");
+}
+
+function updateDayStats() {
+  document.getElementById("statSellos").textContent  = dayStats.sellos;
+  document.getElementById("statPremios").textContent = dayStats.premios;
+  document.getElementById("statClientes").textContent = dayStats.clientes.size;
+}
+
+// ─── Toast ───
+let toastTimer;
+function showToast(msg, isPrize) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.className = "toast show" + (isPrize ? " prize" : "");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("show"), 3000);
+}
+
+// ─── Escáner ───
+function toggleScanner() {
+  scannerActive ? stopScanner() : startScanner();
+}
+
+function startScanner() {
+  document.getElementById("btnScan").textContent = "Detener cámara";
+  document.getElementById("btnScan").classList.add("active");
+  document.getElementById("scannerIdle").classList.add("hidden");
+  scannerActive = true;
+  scanner = new Html5Qrcode("reader");
+  scanner.start(
+    { facingMode:"environment" },
+    { fps:10, qrbox:{ width:200, height:200 } },
+    (text) => { handleQR(text); stopScanner(); },
+    () => {}
+  ).catch(() => { showToast("⚠️ No se pudo acceder a la cámara", false); stopScanner(); });
+}
+
+function stopScanner() {
+  document.getElementById("btnScan").textContent = "Iniciar cámara";
+  document.getElementById("btnScan").classList.remove("active");
+  document.getElementById("scannerIdle").classList.remove("hidden");
+  scannerActive = false;
+  if (scanner) { scanner.stop().catch(() => {}); scanner = null; }
+}
+
+function handleQR(text) {
+  // QR format: "PATITAS:C001"
+  const id = text.replace("PATITAS:", "").trim();
+  document.getElementById("clientInput").value = id;
+  searchClient();
+}
+
+window.searchClient  = searchClient;
+window.addStamp      = addStamp;
+window.openRedeem    = openRedeem;
+window.closeRedeem   = closeRedeem;
+window.confirmRedeem = confirmRedeem;
+window.toggleScanner = toggleScanner;
+</script>
+</body>
+</html>

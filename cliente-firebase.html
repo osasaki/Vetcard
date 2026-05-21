@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Club Patitas VIP</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+
+<!-- ══════════════════════════════════════════
+     🔥 PASO 1: PEGÁ TU CONFIGURACIÓN DE FIREBASE ACÁ
+     (reemplazá los valores de ejemplo)
+     ══════════════════════════════════════════ -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
+  import { getFirestore, doc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey:            "AIzaSyAs227zebpKSNPehrSHMRjZGAcDgu0sRYc",
+    authDomain:        "vetcard-a1104.firebaseapp.com",
+    projectId:         "vetcard-a1104",
+    storageBucket:     "vetcard-a1104.firebasestorage.app",
+    messagingSenderId: "73932243186",
+    appId:             "1:73932243186:web:c060e8f29b852ac042d06b"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db  = getFirestore(app);
+
+  // ── Leer el ID del cliente desde la URL ──
+  // Ejemplo: patitas.vercel.app/cliente.html?id=C001
+  const params   = new URLSearchParams(window.location.search);
+  const clientId = params.get("id") || "C001";
+
+  // ── Escuchar cambios en tiempo real ──
+  const ref = doc(db, "clientes", clientId);
+  onSnapshot(ref, (snap) => {
+    if (snap.exists()) {
+      renderCard(snap.data());
+    } else {
+      document.getElementById("loadingState").textContent = "Cliente no encontrado.";
+    }
+  }, (error) => {
+    console.error("Error de Firebase:", error);
+    document.getElementById("loadingState").innerHTML = `
+      <div style="color: #ff6b6b; font-weight: bold; margin-bottom: 10px;">⚠️ Error de conexión con Firebase</div>
+      <div style="font-size: 12px; opacity: 0.8; max-width: 300px; margin: 0 auto; line-height: 1.4;">
+        No se pudo conectar a la base de datos de Firebase.<br>
+        Detalle: <code style="background: rgba(0,0,0,0.05); padding: 2px 4px; border-radius: 4px; display: inline-block; margin-top: 8px;">${error.message}</code>
+      </div>
+    `;
+  });
+
+  function renderCard(data) {
+    document.getElementById("loadingState").style.display = "none";
+    document.getElementById("cardContent").style.display = "block";
+
+    document.getElementById("petName").textContent  = data.mascota  || "—";
+    document.getElementById("ownerName").textContent = "de " + (data.dueno || "—");
+
+    const stamps = data.sellos || 0;
+    renderStamps(stamps);
+
+    const pct = (stamps / 5) * 100;
+    document.getElementById("progressFill").style.width = pct + "%";
+    document.getElementById("progressCount").textContent = stamps + " / 5";
+
+    const rem = 5 - stamps;
+    if (stamps === 0) {
+      document.getElementById("progressText").textContent = "Completá 5 visitas para ganar tu premio";
+    } else if (stamps >= 5) {
+      document.getElementById("progressText").textContent = "¡Felicitaciones! Tu premio está listo";
+    } else {
+      document.getElementById("progressText").textContent =
+        "Te " + (rem === 1 ? "falta 1 visita" : "faltan " + rem + " visitas");
+    }
+
+    document.getElementById("prizeBanner").style.display = stamps >= 5 ? "flex" : "none";
+    document.getElementById("totalVisits").textContent = data.visitas_total || 0;
+    document.getElementById("totalPrizes").textContent = data.premios       || 0;
+    document.getElementById("nextPrize").textContent   = stamps >= 5 ? "¡Ya!" : (5 - stamps);
+
+    // QR con la URL de esta tarjeta
+    const qrUrl = "https://api.qrserver.com/v1/create-qr-code/?size=56x56&data=PATITAS:" + clientId;
+    document.getElementById("qrImg").src = qrUrl;
+  }
+
+  function renderStamps(count) {
+    const row = document.getElementById("stampsRow");
+    row.innerHTML = "";
+    for (let i = 0; i < 5; i++) {
+      const s = document.createElement("div");
+      if (i < count) {
+        s.className = count >= 5 ? "stamp stamp-prize" : "stamp stamp-filled";
+        s.style.animationDelay = (i * 0.06) + "s";
+        s.textContent = count >= 5 ? "🎁" : "🐾";
+      } else {
+        s.className = "stamp stamp-empty";
+        s.textContent = (i + 1);
+      }
+      row.appendChild(s);
+    }
+  }
+</script>
+
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --sage: #3D7A5F; --sage-light: #5A9E7C; --sage-dark: #2D5040;
+  --cream: #F5F0E8; --warm-white: #FDFAF5;
+  --gold: #C9943A; --gold-light: #E8B85A;
+  --charcoal: #2C2C2C; --muted: #8A8A7A;
+}
+html, body {
+  height: 100%; background: var(--cream);
+  font-family: "DM Sans", sans-serif; color: var(--charcoal);
+  -webkit-font-smoothing: antialiased;
+}
+body {
+  display: flex; align-items: center; justify-content: center;
+  min-height: 100vh; padding: 24px 16px;
+  background-image:
+    radial-gradient(ellipse at 20% 50%, rgba(61,122,95,0.08) 0%, transparent 60%),
+    radial-gradient(ellipse at 80% 20%, rgba(201,148,58,0.06) 0%, transparent 50%);
+}
+.card-wrapper { width: 100%; max-width: 380px; animation: cardIn 0.7s cubic-bezier(0.16,1,0.3,1) both; }
+@keyframes cardIn { from { opacity:0; transform:translateY(32px) scale(0.96); } to { opacity:1; transform:translateY(0) scale(1); } }
+
+.card {
+  background: var(--sage-dark); border-radius: 28px; padding: 32px 28px 28px;
+  position: relative; overflow: hidden;
+  box-shadow: 0 8px 24px rgba(45,80,64,0.25), 0 32px 64px rgba(45,80,64,0.18);
+}
+.card::before {
+  content: ''; position: absolute; inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
+  border-radius: 28px; pointer-events: none; z-index: 0;
+}
+.card::after {
+  content: ''; position: absolute; top:-60px; right:-60px;
+  width:220px; height:220px; border-radius:50%;
+  background: radial-gradient(circle, rgba(106,158,120,0.35) 0%, transparent 70%);
+  pointer-events: none; z-index: 0;
+}
+.card > * { position: relative; z-index: 1; }
+
+.card-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:28px; }
+.brand-eyebrow { font-size:10px; font-weight:500; letter-spacing:0.18em; text-transform:uppercase; color:rgba(255,255,255,0.45); }
+.brand-name { font-family:"Fraunces",serif; font-size:22px; font-weight:700; color:#fff; }
+.brand-name span { color:var(--gold-light); }
+.paw-icon { width:44px; height:44px; background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.12); border-radius:14px; display:flex; align-items:center; justify-content:center; font-size:22px; }
+
+.pet-name { font-family:"Fraunces",serif; font-size:30px; font-weight:600; color:#fff; letter-spacing:-0.5px; }
+.pet-name em { font-style:italic; color:rgba(255,255,255,0.65); font-size:18px; font-weight:400; display:block; margin-top:2px; }
+.pet-info { margin-bottom:28px; }
+
+.stamps-label { font-size:10px; font-weight:500; letter-spacing:0.14em; text-transform:uppercase; color:rgba(255,255,255,0.4); margin-bottom:12px; }
+.stamps-row { display:flex; gap:10px; align-items:center; margin-bottom:20px; }
+.stamp { width:52px; height:52px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:20px; transition:all 0.35s cubic-bezier(0.34,1.56,0.64,1); }
+.stamp-empty { background:rgba(255,255,255,0.06); border:1.5px dashed rgba(255,255,255,0.2); color:rgba(255,255,255,0.2); font-size:14px; }
+.stamp-filled { background:linear-gradient(135deg,var(--sage-light),var(--sage)); border:1.5px solid rgba(255,255,255,0.2); box-shadow:0 4px 12px rgba(0,0,0,0.2); animation:stampPop 0.5s cubic-bezier(0.34,1.56,0.64,1) both; }
+.stamp-prize  { background:linear-gradient(135deg,var(--gold-light),var(--gold)); border:1.5px solid rgba(255,255,255,0.3); box-shadow:0 4px 16px rgba(201,148,58,0.4); animation:stampPop 0.5s cubic-bezier(0.34,1.56,0.64,1) both, glowPulse 2s ease-in-out infinite; }
+@keyframes stampPop { from{transform:scale(0.4) rotate(-15deg);opacity:0;} to{transform:scale(1) rotate(0);opacity:1;} }
+@keyframes glowPulse { 0%,100%{box-shadow:0 4px 16px rgba(201,148,58,0.4);} 50%{box-shadow:0 4px 28px rgba(201,148,58,0.7),0 0 0 6px rgba(201,148,58,0.12);} }
+
+.progress-track { height:4px; background:rgba(255,255,255,0.1); border-radius:99px; overflow:hidden; }
+.progress-fill { height:100%; border-radius:99px; background:linear-gradient(90deg,var(--sage-light),var(--gold-light)); transition:width 0.6s cubic-bezier(0.16,1,0.3,1); }
+.progress-meta { display:flex; justify-content:space-between; align-items:center; margin-top:8px; }
+.progress-text { font-size:12px; color:rgba(255,255,255,0.45); }
+.progress-count { font-family:"Fraunces",serif; font-size:13px; color:rgba(255,255,255,0.7); font-weight:600; }
+
+.card-footer { display:flex; justify-content:space-between; align-items:flex-end; padding-top:20px; border-top:1px solid rgba(255,255,255,0.08); margin-top:20px; }
+.reward-label { font-size:10px; font-weight:500; letter-spacing:0.12em; text-transform:uppercase; color:rgba(255,255,255,0.35); margin-bottom:3px; }
+.reward-value { font-family:"Fraunces",serif; font-size:15px; font-weight:600; color:var(--gold-light); }
+.qr-box { width:56px; height:56px; background:var(--warm-white); border-radius:10px; display:flex; align-items:center; justify-content:center; padding:4px; }
+.qr-box img { width:100%; height:100%; border-radius:6px; }
+.qr-label { font-size:9px; letter-spacing:0.1em; text-transform:uppercase; color:rgba(255,255,255,0.25); text-align:center; margin-top:4px; }
+
+.prize-banner { margin-top:16px; background:linear-gradient(135deg,rgba(201,148,58,0.15),rgba(232,184,90,0.08)); border:1px solid rgba(201,148,58,0.3); border-radius:14px; padding:14px 18px; display:none; align-items:center; gap:12px; }
+.prize-banner-icon { font-size:24px; flex-shrink:0; }
+.prize-banner-title { font-family:"Fraunces",serif; font-size:15px; font-weight:600; color:var(--gold-light); }
+.prize-banner-sub { font-size:12px; color:rgba(255,255,255,0.5); margin-top:2px; }
+
+.info-card { background:var(--warm-white); border-radius:20px; padding:20px 22px; margin-top:16px; display:flex; gap:20px; box-shadow:0 2px 12px rgba(0,0,0,0.06); }
+.info-item { flex:1; display:flex; flex-direction:column; gap:4px; }
+.info-item + .info-item { border-left:1px solid rgba(0,0,0,0.07); padding-left:20px; }
+.info-label { font-size:10px; font-weight:500; letter-spacing:0.12em; text-transform:uppercase; color:var(--muted); }
+.info-value { font-family:"Fraunces",serif; font-size:18px; font-weight:600; color:var(--charcoal); }
+.info-sub { font-size:11px; color:var(--muted); }
+
+.vet-label { text-align:center; margin-top:20px; font-size:12px; color:var(--muted); display:flex; align-items:center; justify-content:center; gap:6px; }
+.vet-label strong { color:var(--sage-dark); font-weight:500; }
+
+.loading-state { text-align:center; padding:60px 20px; color:var(--muted); font-size:14px; }
+#cardContent { display:none; }
+</style>
+</head>
+<body>
+<div class="card-wrapper">
+  <div id="loadingState" class="loading-state">Cargando tu tarjeta...</div>
+
+  <div id="cardContent">
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <div class="brand-eyebrow">Veterinaria Patitas</div>
+          <div class="brand-name">Club <span>VIP</span></div>
+        </div>
+        <div class="paw-icon">🐾</div>
+      </div>
+
+      <div class="pet-info">
+        <div class="pet-name">
+          <span id="petName">—</span>
+          <em id="ownerName">—</em>
+        </div>
+      </div>
+
+      <div class="stamps-label">Visitas acumuladas</div>
+      <div class="stamps-row" id="stampsRow"></div>
+
+      <div class="progress-track">
+        <div class="progress-fill" id="progressFill" style="width:0%"></div>
+      </div>
+      <div class="progress-meta">
+        <span class="progress-text" id="progressText">Cargando...</span>
+        <span class="progress-count" id="progressCount">— / 5</span>
+      </div>
+
+      <div class="prize-banner" id="prizeBanner">
+        <div class="prize-banner-icon">🎁</div>
+        <div>
+          <div class="prize-banner-title">¡Premio desbloqueado!</div>
+          <div class="prize-banner-sub">Mostrá esta pantalla en la veterinaria</div>
+        </div>
+      </div>
+
+      <div class="card-footer">
+        <div>
+          <div class="reward-label">Premio</div>
+          <div class="reward-value">Baño gratis 🛁</div>
+        </div>
+        <div>
+          <div class="qr-box"><img id="qrImg" src="" alt="QR"></div>
+          <div class="qr-label">Mi código</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="info-card">
+      <div class="info-item">
+        <span class="info-label">Visitas totales</span>
+        <span class="info-value" id="totalVisits">0</span>
+        <span class="info-sub">desde el inicio</span>
+      </div>
+      <div class="info-item">
+        <span class="info-label">Premios ganados</span>
+        <span class="info-value" id="totalPrizes">0</span>
+        <span class="info-sub">canjeados</span>
+      </div>
+      <div class="info-item">
+        <span class="info-label">Próximo premio</span>
+        <span class="info-value" id="nextPrize">5</span>
+        <span class="info-sub">visitas restantes</span>
+      </div>
+    </div>
+
+    <div class="vet-label">🏥 <strong>Veterinaria Patitas</strong> · Av. Siempreviva 123</div>
+  </div>
+</div>
+</body>
+</html>
