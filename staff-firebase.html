@@ -37,48 +37,9 @@
   window._limit = limit;
   window._onSnapshot = onSnapshot;
 
-  // Helper para estado de conexión en la interfaz
-  function setConnectionStatus(status) {
-    const dot = document.querySelector(".status-dot");
-    const text = document.querySelector(".status-text");
-    if (!dot || !text) return;
-    if (status === "connecting") {
-      dot.style.background = "#F39C12";
-      dot.style.boxShadow = "0 0 0 2px rgba(243,156,18,0.25)";
-      text.textContent = "Conectando a Firebase...";
-      text.style.color = "rgba(255,255,255,0.45)";
-    } else if (status === "connected") {
-      dot.style.background = "#4CAF7A";
-      dot.style.boxShadow = "0 0 0 2px rgba(76,175,122,0.25)";
-      text.textContent = "Firebase conectado";
-      text.style.color = "rgba(255,255,255,0.45)";
-    } else if (status === "error") {
-      dot.style.background = "#E74C3C";
-      dot.style.boxShadow = "0 0 0 2px rgba(231,76,60,0.25)";
-      text.textContent = "Error de conexión";
-      text.style.color = "#E74C3C";
-    }
-  }
-
-  // Establecer conectando al inicio
-  setConnectionStatus("connecting");
-
   const actRef = query(collection(db, "actividad"), orderBy("timestamp", "desc"), limit(20));
   onSnapshot(actRef, (snap) => {
-    setConnectionStatus("connected");
     renderFeed(snap.docs.map(d => d.data()));
-  }, (error) => {
-    console.error("Error en Firebase Feed:", error);
-    setConnectionStatus("error");
-    const feedList = document.getElementById("feedList");
-    if (feedList) {
-      feedList.innerHTML = `
-        <div class="feed-empty" style="color: #C0392B;">
-          ⚠️ Error al conectar con Firestore. Verifique las credenciales de Firebase en el código e intente de nuevo.<br>
-          <small>${error.message}</small>
-        </div>
-      `;
-    }
   });
 </script>
 </head>
